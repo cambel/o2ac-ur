@@ -3,32 +3,27 @@ from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
 # import of required action
-from o2ac_msgs.msg import OrientBearingAction, OrientBearingGoal
+from o2ac_msgs.msg import ReleaseAction, ReleaseGoal
 
 
-class OrientBearingActionState(EventState):
+class ReleaseActionState(EventState):
     '''
-    Actionlib for aligning the bearing holes
+    Actionlib for releasing an object hold by a robot
 
-    -- task_name        string  Name of the task
+    -- robot_name         string  Name of robot performing the operation
 
-    <= success              OrientBearing completed successfully.
-    <= error                OrientBearing failed to execute.
+    <= success              Release sequence completed successfully.
+    <= error                Release sequence failed to execute.
 
     '''
 
-    def __init__(self, task_name):
-        super(
-            OrientBearingActionState,
-            self).__init__(
-            outcomes=[
-                'success',
-                'error'])
+    def __init__(self, robot_name):
+        super(ReleaseActionState, self).__init__(outcomes=['success', 'error'])
 
-        self._topic = 'o2ac_flexbe/fasten_bearing'
+        self._topic = 'o2ac_flexbe/Release_object'
         # pass required clients as dict (topic: type)
-        self._client = ProxyActionClient({self._topic: OrientBearingAction})
-        self._task_name = task_name
+        self._client = ProxyActionClient({self._topic: ReleaseAction})
+        self._robot_name = robot_name
 
         self._success = False
 
@@ -41,26 +36,24 @@ class OrientBearingActionState(EventState):
 
             Logger.logwarn('result %s' % str(result))
 
-            if not result:
-                Logger.logwarn('Fail to complete OrientBearing')
+            if not result.success:
+                Logger.logwarn('Fail to complete Release sequence')
                 self._success = False
                 return 'error'
             else:
-                Logger.logwarn('Succeed! completed OrientBearing')
+                Logger.logwarn('Succeed! completed Release sequence')
                 self._success = True
                 return 'success'
 
     def on_enter(self, userdata):
-        goal = OrientBearingGoal()
-        goal.task_name = self._task_name
+        goal = ReleaseGoal()
+        goal.robot_name = self._robot_name
 
         self._success = True
         try:
             self._client.send_goal(self._topic, goal)
         except Exception as e:
-            Logger.logwarn(
-                'Failed to send the OrientBearing command:\n%s' %
-                str(e))
+            Logger.logwarn('Failed to send the Release command:\n%s' % str(e))
             self._success = False
 
     def on_exit(self, userdata):

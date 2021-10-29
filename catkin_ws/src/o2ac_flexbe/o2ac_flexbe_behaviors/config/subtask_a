@@ -1,0 +1,6 @@
+(pick b_bot motor)
+(orient b_bot motor)
+(insert b_bot motor panel_motor panel_motor-motor)
+(fasten-with-screw-dual-arm a_bot motor panel_motor-motor b_bot)
+(finished panel_motor-motor)
+; cost = 5 (unit cost)

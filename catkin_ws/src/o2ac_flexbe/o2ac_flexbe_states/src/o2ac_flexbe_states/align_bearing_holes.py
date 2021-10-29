@@ -2,7 +2,7 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-# example import of required action
+# import of required action
 from o2ac_msgs.msg import AlignBearingHolesAction, AlignBearingHolesGoal
 
 

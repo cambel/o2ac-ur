@@ -2,7 +2,7 @@
 from flexbe_core import EventState, Logger
 from flexbe_core.proxy import ProxyActionClient
 
-# example import of required action
+# import of required action
 from o2ac_msgs.msg import FastenAction, FastenGoal
 
 
@@ -10,15 +10,17 @@ class FastenActionState(EventState):
     '''
     Actionlib for aligning the bearing holes
 
-    -- task_name        string  Name of the task
-    -- object_name      string  Name of the object to be fasten
+    -- robot_name         string  Name of the robot performing operation
+    -- task_name          string  Name of the task
+    -- object_name        string  Name of the object to be fasten
+    -- helper_robot_name  string  Name of the auxiliar robot
 
     <= success              Fasten completed successfully.
     <= error                Fasten failed to execute.
 
     '''
 
-    def __init__(self, task_name, object_name):
+    def __init__(self, robot_name, object_name, task_name="", helper_robot_name=""):
         super(FastenActionState, self).__init__(outcomes=['success', 'error'])
 
         self._topic = 'o2ac_flexbe/fasten'
@@ -26,6 +28,8 @@ class FastenActionState(EventState):
         self._client = ProxyActionClient({self._topic: FastenAction})
         self._task_name = task_name
         self._object_name = object_name
+        self._robot_name = robot_name
+        self._helper_robot_name = helper_robot_name
 
         self._success = False
 
@@ -51,6 +55,8 @@ class FastenActionState(EventState):
         goal = FastenGoal()
         goal.task_name = self._task_name
         goal.object_name = self._object_name
+        goal.robot_name = self._robot_name
+        goal.helper_robot_name = self._helper_robot_name
 
         self._success = True
         try:

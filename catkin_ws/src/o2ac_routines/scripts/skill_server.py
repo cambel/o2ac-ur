@@ -45,6 +45,7 @@ from o2ac_msgs.msg import FastenAction, FastenResult
 from o2ac_msgs.msg import AlignBearingHolesAction, AlignBearingHolesResult
 from o2ac_msgs.msg import InsertAction, InsertResult
 from o2ac_msgs.msg import PickAction, PickResult
+from o2ac_msgs.msg import PlaceAction, PlaceResult
 from o2ac_msgs.msg import PlayBackSequenceAction, PlayBackSequenceResult
 import actionlib
 import rospy
@@ -62,7 +63,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 class SkillServer:
-    """ Action servers for Flexbe Interface """
+    """ Action servers for FlexBE Interface """
 
     def __init__(self):
         self.controller = O2ACAssembly()
@@ -71,11 +72,14 @@ class SkillServer:
 
         ns = 'o2ac_flexbe/'
 
-        self.playback_action = actionlib.SimpleActionServer(ns + 'playback_sequence', PlayBackSequenceAction, self.execute_playback, False)
-        self.playback_action.start()
-
         self.pick_action = actionlib.SimpleActionServer(ns + 'pick_object', PickAction, self.execute_pick, False)
         self.pick_action.start()
+
+        self.place_action = actionlib.SimpleActionServer(ns + 'place_object', PlaceAction, self.execute_place, False)
+        self.place_action.start()
+
+        self.playback_action = actionlib.SimpleActionServer(ns + 'playback_sequence', PlayBackSequenceAction, self.execute_playback, False)
+        self.playback_action.start()
 
         self.insertion_action = actionlib.SimpleActionServer(ns + 'force_insertion', InsertAction, self.execute_insertion, False)
         self.insertion_action.start()
