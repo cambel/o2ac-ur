@@ -37,7 +37,7 @@
 - git:
     local-name: third_party/ur_drivers
     uri: https://github.com/UniversalRobots/Universal_Robots_ROS_Driver.git
-    version: 13db13e33702866f230614a6d0bfe583794d8d04
+    version: f306cd1b68553ecffb3fc75416ef7fda07d12ebb
 - git:
     local-name: third_party/gazebo_ros_link_attacher
     uri: https://github.com/pal-robotics/gazebo_ros_link_attacher.git
