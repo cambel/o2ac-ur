@@ -100,15 +100,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ################################################################################
 
-# Install MoveIt dependencies because we build it from source.
-# Also install the binaries to pull in the dependencies.
-RUN apt-get update && apt-get install -y --no-install-recommends \ 
-    ros-melodic-moveit-resources=0.7.3-1bionic.20210921.221050 \
-    ros-melodic-moveit=1.0.8-1bionic.20210922.000107 \
-	&& rm -rf /var/lib/apt/lists/*
-
-################################################################################
-
 # Install wstool to use .rosinstall file in the underlay workspace
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python-wstool=0.1.17-1 \
@@ -352,8 +343,6 @@ RUN pip2 install pyquaternion==0.9.9
 RUN apt-get update && apt-get install -y --no-install-recommends \
     htop=2.1.0-3 \
     ros-melodic-rqt-multiplot=0.0.10-0bionic.20210921.205109 \
-    ros-melodic-trac-ik-python=1.5.1-1bionic.20210921.222641 \
-    ros-melodic-trac-ik-kinematics-plugin=1.5.1-1bionic.20210921.224102 \
     ros-melodic-flexbe-behavior-engine=1.3.1-1bionic.20210921.221501 \
     ros-melodic-gripper-action-controller=0.17.2-1bionic.20210921.220651 \
     ros-melodic-jsk-rviz-plugins=2.1.7-2bionic.20210921.230839 \
