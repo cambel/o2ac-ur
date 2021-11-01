@@ -509,7 +509,7 @@ class O2ACCommon(O2ACBase):
 
         if self.use_dummy_vision or not self.use_real_robot:
             rospy.logwarn("Using dummy vision! Setting object pose to tray center.")
-            self.objects_in_tray[object_id] = conversions.to_pose_stamped("tray_center", [0.01, 0.01, 0.02] + np.deg2rad([0, 90., 0]).tolist())
+            self.objects_in_tray[object_id] = conversions.to_pose_stamped("tray_center", [0.02, 0.02, 0.0] + np.deg2rad([20, 90., 0]).tolist())
             return self.objects_in_tray[object_id]
 
         tray_view_high, close_tray_views = self.define_local_tray_views(robot_name=robot_name, include_rotated_views=True)
@@ -3581,6 +3581,7 @@ class O2ACCommon(O2ACBase):
         direction = "+X" if from_behind else "-X"
         self.b_bot.linear_push(3, direction, max_translation=0.01, timeout=30.0)
         after_push_pose = self.b_bot.get_current_pose_stamped()
+        self.b_bot.gripper.last_attached_object = "shaft"
 
         current_pose = self.b_bot.robot_group.get_current_pose()
         target_pose_target_frame = self.listener.transformPose(target_link, current_pose)
@@ -3634,6 +3635,9 @@ class O2ACCommon(O2ACBase):
         self.b_bot.gripper.close(wait=True)
 
         target_pose_target_frame.pose.position.x = target  # Magic number
+
+        if not self.use_real_robot and not self.use_gazebo_sim:
+            self.b_bot.go_to_pose_goal(target_pose_target_frame, speed=0.02, move_lin=True)
 
         for _ in range(10):
             result = self.b_bot.do_insertion(target_pose_target_frame, insertion_direction=direction, force=15.0, timeout=10.0,
@@ -3766,6 +3770,24 @@ class O2ACCommon(O2ACBase):
         self.b_bot.move_lin_rel(relative_translation=[0, 0.01, 0.1], speed=.3)
         return True
 
+    def visualize_shaft(self, pose):
+        part_properties = self.assembly_database.parts_properties.get("shaft", {})
+        object_visual_pose = copy.deepcopy(pose)
+        # Visualize motor
+        ovp = conversions.from_pose_to_list(object_visual_pose.pose)
+        # visual adjustment with respect to detected pose
+        visual_pose = conversions.to_float(part_properties.get('visual_pose', [0,0,0,0,0,0]))
+        # Orientation
+        rotation_global_z = tf_conversions.transformations.euler_from_quaternion(ovp[3:])[0] % (tau/2)
+        orientation = visual_pose[3:]
+        orientation[2] -= rotation_global_z
+        # Translation
+        translation_correction = 0.075/2.0
+        ovp[:2] += [translation_correction*cos(rotation_global_z)-0.01, -translation_correction*sin(rotation_global_z)]  # Magic Numbers for visuals
+        object_visual_pose.pose.position = conversions.to_point(ovp[:3] + visual_pose[:3])
+        object_visual_pose.pose.orientation = conversions.to_quaternion(tf_conversions.transformations.quaternion_from_euler(*orientation))
+
+        self.markers_scene.spawn_item("shaft", object_visual_pose)
 ##########
 # shaft orientation
 ##########
@@ -3919,7 +3941,7 @@ class O2ACCommon(O2ACBase):
         # self.a_bot.linear_push(force=2.5, direction="-Z", max_translation=0.02, timeout=10.0)
         # target_pose = self.a_bot.get_current_pose_stamped()
         # target_pose.pose.position.z -= 0.002
-        target_pose = conversions.to_pose_stamped("tray_center", [-0.004, 0.010, 0.243]+np.deg2rad([-180, 90, -90]).tolist())
+        target_pose = conversions.to_pose_stamped("tray_center", [0.000, 0.003, 0.232]+np.deg2rad([-180, 90, -90]).tolist())
         # self.a_bot.move_lin_rel(relative_translation=[0, 0, 0.001])  # release pressure before insertion
 
         force_position_selection_matrix = [0.15, 0.15, 0., 1.0, 1, 1]
@@ -3932,6 +3954,10 @@ class O2ACCommon(O2ACBase):
         if result == DONE and attempts > 0:
             return self.insert_end_cap(attempts=attempts-1)
 
+        if not self.use_real_robot and not self.use_gazebo_sim:
+            self.a_bot.go_to_pose_goal(target_pose, speed=0.1, move_lin=True)
+            self.a_bot.gripper.open(wait=False)
+            self.a_bot.move_lin_rel([0,0,0.05])
         return success
 
     def fasten_end_cap(self, skip_unequip_tool=False):
@@ -4360,6 +4386,11 @@ class O2ACCommon(O2ACBase):
         push_direction = "+Z" if not self.assembly_database.assembly_info.get("motor_shaft_down", False) else "-Z"
         self.b_bot.linear_push(4, push_direction, max_translation=0.01, timeout=10.0)
         self.b_bot.gripper.forget_attached_item()
+
+        # mimic insertion on simulation without physics
+        if not self.use_real_robot and not self.use_gazebo_sim:
+            self.b_bot.go_to_pose_goal(target_pose, speed=0.02, move_lin=True)
+        
         return True
 
     def center_motor(self):
@@ -4399,7 +4430,7 @@ class O2ACCommon(O2ACBase):
             to align the shaft near the top.
         """
         # ALTERNATIVE A:
-        if use_urscript:
+        if use_urscript and self.use_real_robot:
             # TODO: Confirm that the motor is indeed in the vgroove after urscript
             if not self.orient_motor_in_aid_edge_urscript():
                 rospy.logerr("Fail to orient motor with URscript.")
@@ -4425,7 +4456,7 @@ class O2ACCommon(O2ACBase):
         self.b_bot.gripper.open(opening_width=.06)
 
         # Repick and drop X times
-        num_tries = 10
+        num_tries = 10 if self.use_real_robot else 1
         for _ in range(num_tries):
             if num_tries < 6:
                 self.b_bot.go_to_pose_goal(repick, move_lin=False)
@@ -4446,6 +4477,8 @@ class O2ACCommon(O2ACBase):
 
         self.b_bot.go_to_pose_goal(drop, speed=0.2)
         self.b_bot.gripper.open(opening_width=.06)
+        
+        return True
 
     def align_motor_pre_insertion(self, simultaneous=False):
         """ Assuming we are in the vgroove aid drop or close
@@ -4561,10 +4594,14 @@ class O2ACCommon(O2ACBase):
                 return False
 
             # Retighten first two screws
-            self.fasten_set_of_screws(screw_poses[:2], screw_size=3, robot_name=robot_name, only_retighten=True,
-                                      skip_intermediate_pose=True, simultaneous=simultaneous, skip_return=False,
-                                      intermediate_pose=intermediate_pose, unequip_when_done=False, attempts=0)
+            if self.use_real_robot:
+                self.fasten_set_of_screws(screw_poses[:2], screw_size=3, robot_name=robot_name, only_retighten=True,
+                                        skip_intermediate_pose=True, simultaneous=simultaneous, skip_return=False,
+                                        intermediate_pose=intermediate_pose, unequip_when_done=False, attempts=0)
 
+            self.active_robots[support_robot].gripper.forget_attached_item()
+            self.active_robots[support_robot].gripper.detach_object("motor")
+            self.publish_part_in_assembled_position("motor", marker_only=True)
             # Let's release b_bot from holding the motor
             seq = []
             seq.append(helpers.to_sequence_gripper('open', gripper_velocity=1.0))

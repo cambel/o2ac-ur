@@ -34,6 +34,7 @@
 #
 # Author: Cristian C. Beltran-Hernandez
 
+import copy
 import signal
 import sys
 from ur_control import conversions
@@ -49,8 +50,10 @@ from o2ac_msgs.msg import PlaceAction, PlaceResult
 from o2ac_msgs.msg import PlayBackSequenceAction, PlayBackSequenceResult
 import actionlib
 import rospy
+import tf_conversions
 import numpy as np
 from math import pi
+
 tau = 2*pi
 
 
@@ -67,7 +70,7 @@ class SkillServer:
 
     def __init__(self):
         self.controller = O2ACAssembly()
-        self.controller.reset_scene_and_robots()
+        # self.controller.reset_scene_and_robots()
         self.controller.competition_mode = True
 
         ns = 'o2ac_flexbe/'
@@ -111,10 +114,8 @@ class SkillServer:
         self.playback_action.set_succeeded(result=PlayBackSequenceResult(success))
 
     def execute_pick(self, goal):
+        """ Perform simple pick or handover pick """
         rospy.loginfo("Received a goal for picking")
-        # TODO(cambel): given an object name, find the magic numbers for gripper.opening_width,
-        # offset from ssd to pick_pose, parameters for picking (check close to border, etc) and others if needed
-
         robot_name = goal.robot_name
         object_name = goal.object_name
 
@@ -135,17 +136,53 @@ class SkillServer:
                                                   axis="z", item_id_to_attach=object_name, lift_up_after_pick=True, approach_with_move_lin=False,
                                                   speed_fast=1.0)
         else:
-            pick_pose = self.controller.look_and_get_grasp_point(object_name)
+            success = False
+            attempts = 5    
 
-            if not pick_pose:  # TODO(cambel): receive number of attempts
-                rospy.logerr("Could not find bearing in tray. Skipping procedure.")
-                self.pick_action.set_succeeded(result=PickResult(False, 0.0))
-                return
+            # Attempt to pick object at most 5 times.
+            for _ in range(attempts):
+                # Find object pose in tray
+                pick_pose = self.controller.look_and_get_grasp_point(object_name, robot_name=goal.robot_name)
+                part_properties = self.controller.assembly_database.parts_properties.get(object_name, {})
+                rospy.loginfo("parts info %s" % part_properties)
+                pick_pose.pose.position.z = part_properties.get('grasp_height', 0.0)
 
-            self.controller.vision.activate_camera(robot_name + "_inside_camera")
-            pick_pose.pose.position.x -= 0.01  # MAGIC NUMBER
-            pick_pose.pose.position.z = 0.0115
-            success = self.controller.simple_pick(robot_name, pick_pose, gripper_force=100.0, approach_height=0.05, axis="z", approach_with_move_lin=False)
+                if not pick_pose:
+                    rospy.logerr("Could not find %s in tray. Abort." % object_name)
+                    self.pick_action.set_succeeded(result=PickResult(False))
+                    return
+                
+                if object_name == "shaft":
+                    self.controller.visualize_shaft(pick_pose)
+                else:
+                    # Visualize motor
+                    object_visual_pose = copy.deepcopy(pick_pose)
+                    ovp = conversions.from_pose_to_list(object_visual_pose.pose)
+                    # visual adjustment with respect to detected pose
+                    visual_pose = conversions.to_float(part_properties.get('visual_pose', [0,0,0,0,0,0]))
+                    # Translation
+                    object_visual_pose.pose.position = conversions.to_point(ovp[:3] + visual_pose[:3])
+
+                    # Orientation
+                    orientation = np.array(tf_conversions.transformations.euler_from_quaternion(conversions.from_quaternion(object_visual_pose.pose.orientation))) % (tau/2)
+                    orientation = orientation + visual_pose[3:] 
+                    object_visual_pose.pose.orientation = conversions.to_quaternion(tf_conversions.transformations.quaternion_from_euler(*orientation))
+                    
+                    self.controller.markers_scene.spawn_item(object_name, object_visual_pose)
+
+                # Activate camera. For visualization purposes only
+                self.controller.vision.activate_camera(robot_name + "_inside_camera")
+                
+                # Attempt a simple pick
+                success = self.controller.simple_pick(robot_name, pick_pose, gripper_force=100.0, 
+                                                    approach_height=0.05, axis="z", 
+                                                    approach_with_move_lin=False,
+                                                    item_id_to_attach=object_name,
+                                                    grasp_width=part_properties.get('grasp_width', 0.14))
+                if success:
+                    break
+
+        self.controller.active_robots[robot_name].go_to_named_pose("centering_area")
 
         if not self.controller.simple_gripper_check(robot_name, min_opening_width=0.005):
             rospy.logerr("Fail to grasp -> %s" % object_name)
@@ -153,17 +190,19 @@ class SkillServer:
             return
 
         if success:
-            rospy.loginfo("Pickup completed successfully!")
+            rospy.loginfo("Pick completed successfully!")
             self.pick_action.set_succeeded(result=PickResult(success))
         else:
-            rospy.logerr("Pickup failed!")
-            self.pick_action.set_aborted(result=PickResult(success))
+            rospy.logerr("Pick failed!")
+            self.pick_action.set_aborted(result=PickResult(False))
+
+    def execute_place(self, goal):
+        pass
 
     def execute_insertion(self, goal):
-        if goal.task_name == "taskboard":
-            target_link = "taskboard_assy_part_07_inserted"
-        elif goal.task_name == "assembly":
-            target_link = "assembled_part_07_inserted"
+        object_id = self.controller.assembly_database.name_to_id(goal.object_name)
+        target_link = "assembled_" + self.controller.assembly_database.assembly_frame_db[object_id]
+        rospy.loginfo("Assembly frame: %s" % target_link)
 
         success = False
         if goal.object_name == "bearing":
@@ -174,18 +213,27 @@ class SkillServer:
             success = self.controller.align_shaft(target_link=target_link, pre_insert_offset=0.06)
             if success:
                 success = self.controller.insert_shaft(target_link=target_link)
+            self.controller.active_robots[goal.robot_name].gripper.detach_object(goal.object_name)
+            self.controller.active_robots[goal.robot_name].gripper.forget_attached_item()
+            self.controller.publish_part_in_assembled_position("shaft", marker_only=True)
+            self.controller.publish_part_in_assembled_position("end_cap", marker_only=True)
         elif goal.object_name == "end_cap":
             pre_insertion_shaft = conversions.to_pose_stamped("tray_center", [0.0, 0, 0.2, 0, 0, -tau/4.])
-            success = self.controller.b_bot.go_to_pose_goal(pre_insertion_shaft, speed=0.2)
+            success = self.controller.b_bot.go_to_pose_goal(pre_insertion_shaft, speed=0.2, move_lin=True)
             if not success:
                 rospy.logerr("Fail to go to pre_insertion_shaft")
             if success:
-                pre_insertion_end_cap = conversions.to_pose_stamped("tray_center", [-0.002, -0.001, 0.25]+np.deg2rad([-180, 90, -90]).tolist())
+                pre_insertion_end_cap = conversions.to_pose_stamped("tray_center", [0.000, 0.003, 0.25]+np.deg2rad([-180, 90, -90]).tolist())
                 if not self.controller.a_bot.go_to_pose_goal(pre_insertion_end_cap, speed=0.2, move_lin=False):
                     rospy.logerr("Fail to go to pre_insertion_end_cap")
                     success = False
             success = self.controller.insert_end_cap()
             self.controller.a_bot.go_to_named_pose("home")
+            self.controller.markers_scene.despawn_item("end_cap")
+        elif goal.object_name == "motor":
+            success = self.controller.align_motor_pre_insertion()
+            if success:
+                success = self.controller.insert_motor(target_link=target_link)
         else:
             rospy.logerr("No insertion supported for object: %s" % goal.object_name)
             self.insertion_action.set_succeeded(result=InsertResult(success))
@@ -217,6 +265,8 @@ class SkillServer:
             success = self.controller.fasten_panel(goal.object_name)
         elif goal.object_name == "panel_motor":
             success = self.controller.fasten_panel(goal.object_name)
+        elif goal.object_name == "motor":
+            success = self.controller.fasten_motor(robot_name=goal.robot_name, support_robot=goal.helper_robot_name)
         else:
             rospy.logerr("Unsupported object_name:%s for fasten skill" % goal.object_name)
             self.fasten_action.set_aborted(result=FastenResult(False))
@@ -240,8 +290,10 @@ class SkillServer:
             success = self.controller.orient_panel(goal.object_name)
         elif goal.object_name == "panel_motor":
             success = self.controller.orient_panel(goal.object_name)
+        elif goal.object_name == "motor":
+            success = self.controller.orient_motor()
         else:
-            rospy.logerr("Unsupported object_name: %s for orient skill" % goal.object_name)
+            rospy.logerr("Unsupported orient skill for object: %s " % goal.object_name)
             self.orient_action.set_aborted(result=OrientResult(False))
 
         if success:
