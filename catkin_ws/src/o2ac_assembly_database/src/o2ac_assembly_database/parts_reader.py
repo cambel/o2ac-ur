@@ -78,7 +78,7 @@ class PartsReader(object):
         self._directory = os.path.join(self._rospack.get_path('o2ac_assembly_database'), 'config', db_name)
         self.assembly_info = self._read_assembly_info()
         self._parts_list = self._read_parts_list()
-        self._collision_objects, self._grasps, self._mesh_filepaths, self._mesh_urls, self._collision_geometry = self.get_collision_objects_with_metadata()
+        self._collision_objects, self._grasps, self._mesh_filepaths, self._mesh_urls, self._collision_geometry, self.parts_properties = self.get_collision_objects_with_metadata()
         self.load_meshes = load_meshes
         if self.verbose:
             rospy.loginfo("Done loading parts database " + db_name)
@@ -290,6 +290,7 @@ class PartsReader(object):
         grasp_names = []
         grasp_poses = []
         mesh_pose = []
+        properties = {}
         primitive_collision_objects = None
         if object_name in objects_with_metadata:
             with open(os.path.join(metadata_directory, object_name + '.yaml'), 'r') as f:
@@ -298,6 +299,7 @@ class PartsReader(object):
                 mesh_pose = geometry_msgs.msg.Pose()
                 mesh_pose.position = conversions.to_vector3(conversions.to_float(data['mesh_pose'][0]['pose_xyzrpy'][:3]))
                 mesh_pose.orientation = geometry_msgs.msg.Quaternion(*tf.transformations.quaternion_from_euler(*conversions.to_float(data['mesh_pose'][0]['pose_xyzrpy'][3:])))
+            properties = data.get('properties', {})
             subframes = data['subframes']
             simplified_collision_object_text = data.get('collision_primitives', None)
             primitive_collision_objects = self._get_collision_shapes(simplified_collision_object_text)
@@ -350,7 +352,7 @@ class PartsReader(object):
             if self.verbose:
                 rospy.logwarn('Object \'' + object_name + '\' has no metadata defined! \n \
                             Returning empty metadata information! \n')
-        return (subframe_names, subframe_poses, grasp_names, grasp_poses, mesh_pose, primitive_collision_objects)
+        return (subframe_names, subframe_poses, grasp_names, grasp_poses, mesh_pose, primitive_collision_objects, properties)
 
     def _read_mesh(self, filename, scale):
         # Try to load the mesh and set it for the collision object
@@ -463,6 +465,7 @@ class PartsReader(object):
         mesh_filepaths = []
         mesh_urls = []
         primitive_collision_objects = []
+        properties = {}
 
         for part in self._parts_list:
             # Find mesh
@@ -473,7 +476,9 @@ class PartsReader(object):
             posestamped = geometry_msgs.msg.PoseStamped()
             posestamped.header.frame_id = 'assembly_root'
 
-            subframe_names, subframe_poses, grasp_names, grasp_poses, mesh_pose, primitive_collision_object = self._read_object_metadata(part['name'])
+            subframe_names, subframe_poses, grasp_names, grasp_poses, mesh_pose, primitive_collision_object, item_properties = self._read_object_metadata(part['name'])
+
+            properties.update({part['name']: item_properties})
 
             collision_object_pose = geometry_msgs.msg.Pose()
             if mesh_pose:
@@ -500,4 +505,4 @@ class PartsReader(object):
 
             primitive_collision_objects.append(primitive_collision_object)
 
-        return (collision_objects, grasps, mesh_filepaths, mesh_urls, primitive_collision_objects)
+        return (collision_objects, grasps, mesh_filepaths, mesh_urls, primitive_collision_objects, properties)

@@ -65,6 +65,7 @@ class AssemblyReader(PartsReader):
         if self.db_name:  # = If a database is loaded the attribute is set in the super method
             self.change_assembly(assembly_name)
         self.assembly_frame_pub_timer = []
+        self.assembly_frame_db = {} #:key= object id, value= frame id
 
     def change_assembly(self, assembly_name):
         if self.db_name != assembly_name:
@@ -202,6 +203,9 @@ class AssemblyReader(PartsReader):
             quaternion = tf.transformations.quaternion_from_euler(*conversions.to_float(row[2:5]))
             transform.transform.rotation = conversions.to_quaternion(quaternion)
             transforms.append(transform)
+
+            obj_id = int(row[1].split('_')[1])
+            self.assembly_frame_db.update({obj_id: row[0]})
 
         return transforms
 

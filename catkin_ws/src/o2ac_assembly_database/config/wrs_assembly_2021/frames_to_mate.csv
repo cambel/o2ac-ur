@@ -16,7 +16,7 @@ part_03_front_hole,    part_07_inserted,      pi, 0, 0,   0,0,0, Panel2 + Bearin
 part_07_front_hole,    part_10_center,        0, 0, 0,    0.001,0,0, Bearing + Spacer
 part_10_center,        part_11_back_tip,      pi, 0, 0,   -0.002,0,0, Spacer + Pulley
 part_07_back_hole,     part_09_inner_surface, 0, 0, 0,    -0.001,0,0, Bearing + End Cap
-part_09_inner_surface, part_08_back_tip,      0, 0, pi,    0,0,0, End Cap + Rotary Shaft
+part_07_inserted,      part_08_back_tip,       0, 0, 0,   0.022,0,0, Bearing + Shaft
 
 # The idler assembly in the middle
 part_03_pulley_ridge_middle, part_12_center,           0, 0, 0,   -0.00475+0.001,0,0, Panel2 + Spacer (1 mm accounts for washer that is not shown)
