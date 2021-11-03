@@ -6064,6 +6064,10 @@ class O2ACCommon(O2ACBase):
         place_pose = self.define_panel_place_pose(panel_name)
         above_plate_pose = copy.deepcopy(place_pose)
         above_plate_pose.pose.position.x = -0.100
+        if panel_name == "panel_bearing":
+            place_pose.pose.position.x = -0.06
+        else:
+            place_pose.pose.position.x = -0.05
 
         # print("Plate place pose:", panel_name, grasp_pose.pose.position)
 

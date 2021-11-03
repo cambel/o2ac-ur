@@ -70,6 +70,7 @@ class SkillServer:
 
     def __init__(self):
         self.controller = O2ACAssembly()
+        self.controller.define_objects_in_tray_arrangement(layout_number=2)
         # self.controller.reset_scene_and_robots()
         self.controller.competition_mode = True
 
@@ -118,8 +119,13 @@ class SkillServer:
         rospy.loginfo("Received a goal for picking")
         robot_name = goal.robot_name
         object_name = goal.object_name
+        helper_robot_name = goal.helper_robot_name
 
         self.controller.activate_led(robot_name)
+
+        if helper_robot_name:
+            return self.execute_pick_with_handover(goal)
+
         if object_name in ("base", "panel_bearing", "panel_motor"):
             if self.controller.use_real_robot:
                 pick_pose = self.controller.get_large_item_position_from_top(object_name, robot_name)
@@ -196,8 +202,37 @@ class SkillServer:
             rospy.logerr("Pick failed!")
             self.pick_action.set_aborted(result=PickResult(False))
 
+    def execute_pick_with_handover(self, goal):
+        rospy.loginfo("Pick with handover")
+        robot_name = goal.robot_name
+        object_name = goal.object_name
+        helper_robot_name = goal.helper_robot_name
+        if object_name not in ("panel_bearing", "panel_motor"):
+            rospy.logerr("Unsupported pick with handover for object: %s" % object_name)
+            self.pick_action.set_aborted(result=PickResult(False))
+
+        # NOTE: b_bot picks, a_bot receives
+        success = self.controller.pick_panel_with_handover(object_name, simultaneous=True, rotate_on_failure=True)
+        if success:
+            rospy.loginfo("Pick completed successfully!")
+            self.pick_action.set_succeeded(result=PickResult(success))
+        else:
+            rospy.logerr("Pick failed!")
+            self.pick_action.set_aborted(result=PickResult(False))
+
     def execute_place(self, goal):
-        pass
+        robot_name = goal.robot_name
+        object_name = goal.object_name
+        # target = goal.target
+
+        if object_name in ("panel_bearing", "panel_motor"):
+            success = self.controller.place_panel(robot_name, object_name, pick_again=False)
+        if success:
+            rospy.loginfo("Place completed successfully!")
+            self.place_action.set_succeeded(result=PlaceResult(success))
+        else:
+            rospy.logerr("Place failed!")
+            self.place_action.set_aborted(result=PlaceResult(False))
 
     def execute_insertion(self, goal):
         object_id = self.controller.assembly_database.name_to_id(goal.object_name)
@@ -262,9 +297,11 @@ class SkillServer:
         elif goal.object_name == "end_cap":
             success = self.controller.fasten_end_cap()
         elif goal.object_name == "panel_bearing":
-            success = self.controller.fasten_panel(goal.object_name)
+            # NOTE: b_bot fastens, a_bot holds
+            success = self.controller.fasten_panel(goal.object_name, unequip_tool_on_success=True)
         elif goal.object_name == "panel_motor":
-            success = self.controller.fasten_panel(goal.object_name)
+            # NOTE: b_bot fastens, a_bot holds
+            success = self.controller.fasten_panel(goal.object_name, unequip_tool_on_success=True)
         elif goal.object_name == "motor":
             success = self.controller.fasten_motor(robot_name=goal.robot_name, support_robot=goal.helper_robot_name)
         else:

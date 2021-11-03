@@ -24,7 +24,7 @@ class PlaceActionState(EventState):
     def __init__(self, robot_name, object_name, target):
         super(PlaceActionState, self).__init__(outcomes=['success', 'error'])
 
-        self._topic = 'o2ac_flexbe/Place_object'
+        self._topic = 'o2ac_flexbe/place_object'
         # pass required clients as dict (topic: type)
         self._client = ProxyActionClient({self._topic: PlaceAction})
         self._robot_name = robot_name

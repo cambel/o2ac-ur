@@ -48,11 +48,17 @@ def main():
     # c.insert_end_cap()
     # c.fasten_motor()
     c.reset_scene_and_robots()
+    objects = ['panel_motor', 'panel_bearing']
+    poses = [[-0.04, 0.01, 0.001, 0.0, 0.0, tau/2],
+             [0.01, -0.08, 0.001, 0.0, 0.0, tau/2]]
+    # c.spawn_multiple_objects('wrs_assembly_2020', objects, poses, 'tray_center')
+    
     c.ab_bot.go_to_named_pose("home")
     c.publish_part_in_assembled_position("base", marker_only=True)
-    c.publish_part_in_assembled_position("panel_bearing", marker_only=True)
-    c.publish_part_in_assembled_position("panel_motor", marker_only=True)
-    c.publish_part_in_assembled_position("bearing", marker_only=True)
+
+    # c.publish_part_in_assembled_position("panel_bearing", marker_only=True)
+    # c.publish_part_in_assembled_position("panel_motor", marker_only=True)
+    # c.publish_part_in_assembled_position("bearing", marker_only=True)
     # c.publish_part_in_assembled_position("shaft", marker_only=True)
     # c.publish_part_in_assembled_position("end_cap", marker_only=True)
     # c = O2ACAssembly()
